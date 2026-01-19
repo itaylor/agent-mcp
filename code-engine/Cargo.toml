@@ -1,0 +1,23 @@
+[package]
+name = "code-engine"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "code-engine"
+path = "src/main.rs"
+
+[dependencies]
+ropey = "1.6"
+tree-sitter = "0.20"
+tree-sitter-typescript = "0.20"
+tree-sitter-rust = "0.20"
+tree-sitter-java = "0.20"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+thiserror = "1.0"
+walkdir = "2.4"
+
+[dev-dependencies]
+tempfile = "3.8"

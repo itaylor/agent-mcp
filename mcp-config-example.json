@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "agent-code": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/agent-mcp/mcp-server/dist/index.js"
+      ],
+      "env": {
+        "REPO_ROOT": "/path/to/your/codebase",
+        "CODE_ENGINE_PATH": "/absolute/path/to/agent-mcp/code-engine/target/release/code-engine"
+      }
+    }
+  }
+}
