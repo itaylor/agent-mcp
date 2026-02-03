@@ -33,6 +33,7 @@ This project uses a **two-process architecture** for optimal performance:
 8. **`create_file`** - Create or overwrite files with UTF-8 content
 9. **`read_file_info`** - Get file metadata (size, mtime, type, existence) without reading contents
 10. **`delete_file`** - Delete files or directories recursively
+11. **`docker_shell`** - Execute shell commands in an isolated Ubuntu 24.04 LTS Docker container
 
 ### Key Capabilities
 
@@ -49,6 +50,7 @@ This project uses a **two-process architecture** for optimal performance:
 - **Node.js**: 18.0+
 - **ripgrep**: Must be installed and available in PATH
 - **Git**: For cloning the repository
+- **Docker**: Required for `docker_shell` tool (optional if not using this feature)
 
 ### Install ripgrep
 
@@ -104,6 +106,7 @@ The server reads from stdin and writes to stdout (MCP protocol via stdio):
 # Set environment variables (optional)
 export REPO_ROOT=/path/to/your/repo
 export CODE_ENGINE_PATH=/path/to/code-engine/binary
+export AGENT_MCP_DOCKER_IMAGE=ubuntu:24.04
 
 # Start the server
 cd mcp-server
@@ -114,6 +117,7 @@ npm start
 
 - `REPO_ROOT`: Root directory to operate on (default: current directory)
 - `CODE_ENGINE_PATH`: Path to Rust engine binary (default: `../code-engine/target/release/code-engine`)
+- `AGENT_MCP_DOCKER_IMAGE`: Docker image to use for `docker_shell` tool (default: `ubuntu:24.04`)
 
 ### Using with MCP Clients
 
@@ -251,6 +255,33 @@ Returns:
   "filePath": "src/temp/old-file.ts"
 }
 ```
+
+### docker_shell
+
+Execute shell commands in a persistent Docker container (default: Ubuntu 24.04 LTS, configurable via `AGENT_MCP_DOCKER_IMAGE` environment variable) with the repo mounted at `/workspace`.
+
+```json
+{
+  "command": "cargo test",
+  "workDir": "code-engine",
+  "timeoutMs": 60000
+}
+```
+
+Returns `[data, stream]` tuples preserving stdout/stderr order:
+```json
+{
+  "exitCode": 0,
+  "output": [
+    ["Starting...\n", "stdout"],
+    ["Warning\n", "stderr"],
+    ["Done\n", "stdout"]
+  ],
+  "success": true
+}
+```
+
+Container starts on first use and stops when server exits (--rm flag).
 
 ### read_file
 

@@ -7,12 +7,20 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { RustEngineClient } from "./engineClient.js";
 import { resolve } from "node:path";
+import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Get repo root from environment or command line
 const repoRoot = process.env.REPO_ROOT || process.argv[2] || process.cwd();
 const enginePath =
   process.env.CODE_ENGINE_PATH ||
   resolve(__dirname, "../../code-engine/target/release/code-engine");
+const dockerImage = process.env.AGENT_MCP_DOCKER_IMAGE || "ubuntu:24.04";
 
 // Initialize Rust engine client
 const engine = new RustEngineClient({
@@ -48,8 +56,8 @@ const tools: Tool[] = [
         },
         depth: {
           type: "number",
-          description: "Maximum depth to traverse (default: 4)",
-          default: 4,
+          description: "Maximum depth to traverse (default: 1)",
+          default: 1,
         },
         includeHidden: {
           type: "boolean",
@@ -369,6 +377,32 @@ const tools: Tool[] = [
       required: ["filePath"],
     },
   },
+  {
+    name: "docker_shell",
+    description: `Execute a shell command in an isolated ${dockerImage} Docker container with the repo root mounted as the working directory. Provides a consistent, sandboxed execution environment regardless of host OS. Returns output as an array of [data, stream] tuples that preserve temporal ordering of stdout and stderr.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        command: {
+          type: "string",
+          description: "The shell command to execute in the container",
+        },
+        timeoutMs: {
+          type: "number",
+          description:
+            "Maximum execution time in milliseconds (default: 30000)",
+          default: 30000,
+        },
+        workDir: {
+          type: "string",
+          description:
+            "Working directory relative to repo root (default: '.' for repo root)",
+          default: ".",
+        },
+      },
+      required: ["command"],
+    },
+  },
 ];
 
 // Register tool list handler
@@ -422,6 +456,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "read_file":
         result = await engine.call("read_file", args);
+        break;
+
+      case "docker_shell":
+        result = await executeDockerShell(args);
         break;
 
       default:
@@ -480,6 +518,142 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 });
+
+// Persistent Docker container management
+let dockerContainerId: string | null = null;
+
+async function ensureDockerContainer(): Promise<string> {
+  if (dockerContainerId) return dockerContainerId;
+
+  const containerName = `agent-mcp-${randomBytes(8).toString("hex")}`;
+  const uid = process.getuid?.() || 1000;
+  const gid = process.getgid?.() || 1000;
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn("docker", [
+      "run",
+      "-d",
+      "--rm",
+      "--name",
+      containerName,
+      "--user",
+      `${uid}:${gid}`,
+      "-v",
+      `${repoRoot}:/workspace`,
+      "-w",
+      "/workspace",
+      dockerImage,
+      "sleep",
+      "infinity",
+    ]);
+
+    let output = "";
+    proc.stdout.on("data", (chunk) => (output += chunk.toString()));
+    proc.stderr.on("data", (chunk) => (output += chunk.toString()));
+
+    proc.on("close", (code) => {
+      if (code === 0) {
+        dockerContainerId = output.trim();
+        resolve(dockerContainerId!);
+      } else {
+        reject(new Error(`Failed to start Docker container: ${output}`));
+      }
+    });
+  });
+}
+
+function stopDockerContainer() {
+  if (!dockerContainerId) return;
+  spawn("docker", ["stop", dockerContainerId], { stdio: "ignore" });
+  dockerContainerId = null;
+}
+
+process.on("exit", stopDockerContainer);
+process.on("SIGINT", () => {
+  stopDockerContainer();
+  process.exit(0);
+});
+process.on("SIGTERM", () => {
+  stopDockerContainer();
+  process.exit(0);
+});
+
+// Docker shell execution
+async function executeDockerShell(args: any): Promise<any> {
+  const command = args.command;
+  const timeoutMs = args.timeoutMs || 30000;
+  const workDir = args.workDir || ".";
+
+  if (!command || typeof command !== "string") {
+    throw new Error("command must be a non-empty string");
+  }
+
+  const containerId = await ensureDockerContainer();
+
+  const dockerArgs = [
+    "exec",
+    "-w",
+    `/workspace/${workDir}`,
+    containerId,
+    "/bin/bash",
+    "-c",
+    command,
+  ];
+
+  return new Promise((resolve, reject) => {
+    const output: Array<[string, "stdout" | "stderr"]> = [];
+    let timedOut = false;
+
+    const proc = spawn("docker", dockerArgs, {
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      proc.kill("SIGTERM");
+      setTimeout(() => proc.kill("SIGKILL"), 2000);
+    }, timeoutMs);
+
+    proc.stdout.on("data", (chunk) => {
+      output.push([chunk.toString(), "stdout"]);
+    });
+
+    proc.stderr.on("data", (chunk) => {
+      output.push([chunk.toString(), "stderr"]);
+    });
+
+    proc.on("error", (error) => {
+      clearTimeout(timer);
+      reject(
+        new Error(
+          `Failed to exec in Docker container: ${error.message}. Ensure Docker is running.`,
+        ),
+      );
+    });
+
+    proc.on("close", (code, signal) => {
+      clearTimeout(timer);
+
+      if (timedOut) {
+        const partialOutput = output.map(([data]) => data).join("");
+        reject(
+          new Error(
+            `Command timed out after ${timeoutMs}ms. Partial output:\n${partialOutput}`,
+          ),
+        );
+        return;
+      }
+
+      resolve({
+        exitCode: code ?? (signal ? -1 : 0),
+        signal: signal || null,
+        output,
+        success: code === 0,
+      });
+    });
+  });
+}
 
 // Start the server
 async function main() {

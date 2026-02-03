@@ -161,6 +161,49 @@ Apply anchor-based edits.
 
 ---
 
+### docker_shell
+
+Execute shell commands in isolated Ubuntu 24.04 LTS container.
+
+```typescript
+{
+  command: string;      // Required: shell command to execute
+  timeoutMs?: number;   // Default: 30000 (30 seconds)
+  workDir?: string;     // Default: "." (repo root)
+}
+```
+
+**Returns:** `{ exitCode, signal, output: Array<[data, stream]>, success }`
+
+**Output format:** Array of `[data, stream]` tuples preserving temporal order:
+- `output[i][0]` - the data chunk (string)
+- `output[i][1]` - stream identifier ("stdout" or "stderr")
+
+**Example:**
+```typescript
+{
+  "exitCode": 0,
+  "signal": null,
+  "output": [
+    ["Starting...\n", "stdout"],
+    ["Warning: deprecated\n", "stderr"],
+    ["Done!\n", "stdout"]
+  ],
+  "success": true
+}
+```
+
+**Usage:**
+```javascript
+// Get combined output
+result.output.map(o => o[0]).join('')
+
+// Get only errors
+result.output.filter(o => o[1] === 'stderr').map(o => o[0]).join('')
+```
+
+---
+
 ## Error Codes
 
 | Code | Meaning | Action |
@@ -220,6 +263,23 @@ apply_patch({
 })
 ```
 
+### Execute Commands
+
+```javascript
+// Build and test in isolated environment
+docker_shell({
+  command: "cargo build --release && cargo test",
+  workDir: "code-engine",
+  timeoutMs: 120000
+})
+
+// Run linter
+docker_shell({
+  command: "cargo clippy -- -D warnings",
+  workDir: "code-engine"
+})
+```
+
 ---
 
 ## Best Practices
@@ -230,6 +290,8 @@ apply_patch({
 - Scope searches with `cwd` and `globs`
 - Handle `DRIFT_DETECTED` by re-reading
 - Use unique, stable anchor text
+- Combine docker_shell commands to reduce overhead
+- Set appropriate timeouts for long operations
 
 ❌ **DON'T:**
 - Use line numbers (they change) - use anchors
@@ -237,6 +299,7 @@ apply_patch({
 - Apply patches without reading first
 - Use vague anchors ("}", "//")
 - Traverse with `..` in paths
+- Run destructive commands without testing first
 
 ---
 
