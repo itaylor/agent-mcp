@@ -102,6 +102,11 @@ const tools: Tool[] = [
           type: "boolean",
           description: "Treat pattern as regex (default: true)",
         },
+        noIgnore: {
+          type: "boolean",
+          description: "Ignore .gitignore and search all files (default: true)",
+          default: true,
+        },
         maxMatches: {
           type: "number",
           description: "Maximum total matches to return (default: 200)",
@@ -111,6 +116,12 @@ const tools: Tool[] = [
           type: "number",
           description: "Maximum matches per file (default: 50)",
           default: 50,
+        },
+        maxLineLength: {
+          type: "number",
+          description:
+            "Maximum line length in characters. Lines longer than this will be truncated with context around the match (default: 200)",
+          default: 200,
         },
       },
       required: ["pattern"],

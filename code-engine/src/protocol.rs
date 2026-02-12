@@ -149,16 +149,26 @@ pub struct SearchTextArgs {
     pub case_sensitive: Option<bool>,
     #[serde(default)]
     pub regex: Option<bool>,
+    #[serde(default = "default_no_ignore")]
+    pub no_ignore: bool,
     #[serde(default = "default_max_matches")]
     pub max_matches: usize,
     #[serde(default = "default_max_per_file")]
     pub max_per_file: usize,
+    #[serde(default = "default_max_line_length")]
+    pub max_line_length: usize,
+}
+fn default_no_ignore() -> bool {
+    true
 }
 fn default_max_matches() -> usize {
     200
 }
 fn default_max_per_file() -> usize {
     50
+}
+fn default_max_line_length() -> usize {
+    200
 }
 
 #[derive(Debug, Serialize)]
