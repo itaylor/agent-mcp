@@ -129,7 +129,6 @@ Pre-built binaries for the following targets are attached to each [GitHub Releas
 | `aarch64-unknown-linux-gnu` | Linux ARM64 (glibc) |
 | `aarch64-unknown-linux-musl` | Linux ARM64 (static musl) |
 | `aarch64-apple-darwin` | macOS Apple Silicon |
-| `x86_64-apple-darwin` | macOS Intel |
 | `x86_64-pc-windows-msvc` | Windows x86_64 |
 | `aarch64-pc-windows-msvc` | Windows ARM64 |
 
