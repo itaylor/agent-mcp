@@ -1,0 +1,21 @@
+# Cross-compilation linker configuration.
+# Targets are added in CI via `rustup target add <target>`.
+
+# Linux x86_64 GNU (native on ubuntu runners — no special linker needed)
+# [target.x86_64-unknown-linux-gnu]
+
+# Linux x86_64 musl — requires musl-tools on the host
+[target.x86_64-unknown-linux-musl]
+linker = "musl-gcc"
+
+# Linux aarch64 GNU — use cross-linker from gcc-aarch64-linux-gnu package
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
+
+# Linux aarch64 musl — use cross-linker from musl-cross or cross tool
+[target.aarch64-unknown-linux-musl]
+linker = "aarch64-linux-musl-gcc"
+
+# macOS targets use the default Apple linker — no config needed.
+
+# Windows targets use the MSVC linker — no config needed when building on Windows runners.

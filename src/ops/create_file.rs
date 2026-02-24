@@ -39,7 +39,7 @@ pub fn run(ws: &Workspace, args: CreateFileArgs) -> Result<CreateFileResult, Eng
     let already_exists = resolved.exists();
 
     // Write the file
-    let bytes_written = args.contents.as_bytes().len();
+    let bytes_written = args.contents.len();
     fs::write(&resolved, &args.contents).map_err(|e| {
         EngineError::new(ErrorCode::IoError, "Failed to write file").with_details(json!({
             "path": args.file_path,
@@ -53,7 +53,6 @@ pub fn run(ws: &Workspace, args: CreateFileArgs) -> Result<CreateFileResult, Eng
         bytes_written,
     })
 }
-
 
 #[cfg(test)]
 #[path = "create_file_test.rs"]

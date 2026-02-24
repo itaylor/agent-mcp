@@ -61,7 +61,6 @@ pub fn run(ws: &Workspace, args: ReadFileInfoArgs) -> Result<ReadFileInfoResult,
     })
 }
 
-
 #[cfg(test)]
 #[path = "read_file_info_test.rs"]
 mod read_file_info_test;

@@ -1,58 +1,38 @@
 # Agent MCP Server
 
-A high-performance MCP (Model Context Protocol) server for code operations, designed for LLM agentic workflows. This server provides file system navigation, text search, code analysis, and intelligent patch application capabilities.
+A high-performance MCP (Model Context Protocol) server for code operations, designed for LLM agentic workflows. Provides file system navigation, text search, code analysis, intelligent patch application, and isolated Docker shell execution — all in a single Rust binary.
 
 ## Architecture
 
-This project uses a **two-process architecture** for optimal performance:
+A single Rust binary that speaks the MCP stdio protocol directly via [`rmcp`](https://github.com/modelcontextprotocol/rust-sdk).
 
-1. **Node.js MCP Server** (thin shim)
-   - Implements the official MCP SDK
-   - Exposes tools via MCP protocol
-   - Handles request validation and routing
+- **MCP transport**: stdio (JSON-RPC over stdin/stdout)
+- **File cache**: Ropey-based rope cache with (mtime, size) invalidation
+- **Search**: ripgrep subprocess
+- **Code parsing**: tree-sitter (TypeScript/JavaScript, Rust, Java)
+- **Docker isolation**: persistent container managed internally
 
-2. **Rust Code Engine** (heavy lifting)
-   - Single long-lived subprocess
-   - Owns all filesystem operations
-   - Maintains intelligent Ropey-based cache with mtime/size invalidation
-   - Implements search (via ripgrep), parsing (via tree-sitter), and patch application
+## Tools
 
-**Communication**: NDJSON over stdin/stdout between Node and Rust processes.
-
-## Features
-
-### Tools Provided
-
-1. **`list_dir`** - Directory tree listing with depth control and hidden file filtering
-2. **`search_text`** - Fast text search using ripgrep with regex support
-3. **`read_excerpt`** - Read specific line ranges from files (hard limit: 100KB per request)
-4. **`read_file`** - Read entire file contents (hard limit: 100KB, cannot be exceeded)
-5. **`explore_code`** - Extract code symbols (functions, classes, interfaces, etc.) using tree-sitter
-6. **`apply_patch`** - Anchor-based code editing with strict drift detection
-7. **`create_directory`** - Create directories with automatic parent directory creation
-8. **`create_file`** - Create or overwrite files with UTF-8 content
-9. **`read_file_info`** - Get file metadata (size, mtime, type, existence) without reading contents
-10. **`delete_file`** - Delete files or directories recursively
-11. **`docker_shell`** - Execute shell commands in an isolated Ubuntu 24.04 LTS Docker container
-
-### Key Capabilities
-
-- **Zero explicit versioning**: Cache automatically detects external file changes via (mtime, size) comparison
-- **Anchor-based patching**: Edit files by specifying text anchors rather than line numbers
-- **Drift detection**: Fails fast when code has changed unexpectedly
-- **Multi-language support**: TypeScript/JavaScript, Rust, and Java code parsing
-- **Atomic writes**: File changes use temp-file + rename for safety
-- **Path sandboxing**: All operations confined to specified repo root
+| Tool | Description |
+|------|-------------|
+| `list_dir` | Directory tree listing with depth control and hidden file filtering |
+| `search_text` | Fast text search via ripgrep with regex support |
+| `read_excerpt` | Read specific line ranges from files (hard limit: 100KB) |
+| `read_file` | Read entire file contents (hard limit: 100KB) |
+| `explore_code` | Extract code symbols using tree-sitter |
+| `apply_patch` | Anchor-based code editing with drift detection |
+| `create_directory` | Create directories with automatic parent creation |
+| `create_file` | Create or overwrite files with UTF-8 content |
+| `read_file_info` | Get file metadata without reading contents |
+| `delete_file` | Delete files or directories recursively |
+| `docker_shell` | Execute commands in a persistent isolated Docker container |
 
 ## Prerequisites
 
 - **Rust**: 1.70+ with Cargo
-- **Node.js**: 18.0+
-- **ripgrep**: Must be installed and available in PATH
-- **Git**: For cloning the repository
-- **Docker**: Required for `docker_shell` tool (optional if not using this feature)
-
-### Install ripgrep
+- **ripgrep**: Must be in `PATH`
+- **Docker**: Required for `docker_shell` tool only
 
 ```bash
 # macOS
@@ -60,79 +40,61 @@ brew install ripgrep
 
 # Ubuntu/Debian
 apt install ripgrep
-
-# Arch Linux
-pacman -S ripgrep
-
-# Windows
-choco install ripgrep
 ```
 
-## Installation
-
-### 1. Clone the Repository
+## Build
 
 ```bash
-git clone <repository-url>
-cd agent-mcp
-```
-
-### 2. Build Rust Engine
-
-```bash
-cd code-engine
 cargo build --release
-cd ..
 ```
 
-The compiled binary will be at `code-engine/target/release/code-engine`.
+The binary will be at `target/release/agent-mcp`.
 
-### 3. Setup Node Server
+### Cross-compilation
+
+The `.cargo/config.toml` sets up linkers for common cross targets. Install the appropriate toolchain first:
 
 ```bash
-cd mcp-server
-npm install
-npm run build
-cd ..
+# Linux x86_64 musl (static)
+rustup target add x86_64-unknown-linux-musl
+sudo apt install musl-tools
+cargo build --release --target x86_64-unknown-linux-musl
+
+# Linux aarch64 GNU
+rustup target add aarch64-unknown-linux-gnu
+sudo apt install gcc-aarch64-linux-gnu
+cargo build --release --target aarch64-unknown-linux-gnu
+
+# Linux aarch64 musl — use cross
+cargo install cross
+cross build --release --target aarch64-unknown-linux-musl
 ```
 
 ## Usage
 
-### Running the MCP Server
-
-The server reads from stdin and writes to stdout (MCP protocol via stdio):
-
 ```bash
-# Set environment variables (optional)
-export REPO_ROOT=/path/to/your/repo
-export CODE_ENGINE_PATH=/path/to/code-engine/binary
-export AGENT_MCP_DOCKER_IMAGE=ubuntu:24.04
+# Point at a repo root (default: current directory)
+REPO_ROOT=/path/to/repo ./agent-mcp
 
-# Start the server
-cd mcp-server
-npm start
+# Or pass it as an argument
+./agent-mcp /path/to/repo
 ```
 
-### Configuration via Environment Variables
+### Environment Variables
 
-- `REPO_ROOT`: Root directory to operate on (default: current directory)
-- `CODE_ENGINE_PATH`: Path to Rust engine binary (default: `../code-engine/target/release/code-engine`)
-- `AGENT_MCP_DOCKER_IMAGE`: Docker image to use for `docker_shell` tool (default: `ubuntu:24.04`)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REPO_ROOT` | `.` | Root directory for all file operations |
+| `AGENT_MCP_DOCKER_IMAGE` | `ubuntu:24.04` | Docker image for `docker_shell` |
 
-### Using with MCP Clients
-
-This server implements the standard MCP protocol and can be used with any MCP-compatible client.
-
-#### Example MCP Configuration
-
-Add to your MCP client configuration:
+### MCP Client Configuration
 
 ```json
 {
   "mcpServers": {
-    "agent-code": {
-      "command": "node",
-      "args": ["/path/to/agent-mcp/mcp-server/dist/index.js"],
+    "agent-mcp": {
+      "command": "/path/to/agent-mcp",
+      "args": ["/path/to/target/repository"],
       "env": {
         "REPO_ROOT": "/path/to/target/repository"
       }
@@ -141,255 +103,49 @@ Add to your MCP client configuration:
 }
 ```
 
-## Tool Usage Examples
-
-### list_dir
-
-```json
-{
-  "dirPath": "src",
-  "depth": 3,
-  "includeHidden": false,
-  "maxEntries": 1000
-}
-```
-
-### search_text
-
-```json
-{
-  "pattern": "function\\s+\\w+",
-  "cwd": "src",
-  "globs": ["*.ts", "*.js"],
-  "caseSensitive": false,
-  "regex": true,
-  "maxMatches": 100
-}
-```
-
-### read_excerpt
-
-Read specific line ranges from files. The `maxBytes` parameter has a hard limit of 100KB (102,400 bytes) that cannot be exceeded - any value above this will be capped to 100KB. Default is 20KB.
-
-```json
-{
-  "filePath": "src/index.ts",
-  "startLine": 10,
-  "endLine": 30,
-  "maxBytes": 10000
-}
-```
-
-### explore_code
-
-```json
-{
-  "filePath": "src/server.ts",
-  "exported": true,
-  "maxSymbols": 200
-}
-```
-
-### apply_patch
-
-```json
-{
-  "filePath": "src/example.ts",
-  "mode": "strict",
-  "dryRun": false,
-  "edits": [
-    {
-      "kind": "insert",
-      "where": "after",
-      "anchor": {
-        "needle": "import express from 'express';",
-        "requireUnique": true
-      },
-      "text": "\nimport cors from 'cors';"
-    }
-  ]
-}
-```
-
-### create_directory
-
-```json
-{
-  "dirPath": "src/components/new-feature"
-}
-```
-
-### create_file
-
-```json
-{
-  "filePath": "src/config/settings.json",
-  "contents": "{\n  \"apiUrl\": \"https://api.example.com\"\n}",
-  "encoding": "utf8"
-}
-```
-
-### read_file_info
-
-```json
-{
-  "filePath": "src/index.ts"
-}
-```
-
-Returns:
-```json
-{
-  "filePath": "src/index.ts",
-  "exists": true,
-  "entryType": "file",
-  "size": 2048,
-  "mtimeNs": 1768798629128117000
-}
-```
-
-### delete_file
-
-```json
-{
-  "filePath": "src/temp/old-file.ts"
-}
-```
-
-### docker_shell
-
-Execute shell commands in a persistent Docker container (default: Ubuntu 24.04 LTS, configurable via `AGENT_MCP_DOCKER_IMAGE` environment variable) with the repo mounted at `/workspace`.
-
-```json
-{
-  "command": "cargo test",
-  "workDir": "code-engine",
-  "timeoutMs": 60000
-}
-```
-
-Returns `[data, stream]` tuples preserving stdout/stderr order:
-```json
-{
-  "exitCode": 0,
-  "output": [
-    ["Starting...\n", "stdout"],
-    ["Warning\n", "stderr"],
-    ["Done\n", "stdout"]
-  ],
-  "success": true
-}
-```
-
-Container starts on first use and stops when server exits (--rm flag).
-
-### read_file
-
-Read entire file contents. The `maxBytes` parameter has a hard limit of 100KB (102,400 bytes) that cannot be exceeded - any value above this will be capped to 100KB. For larger files, use `read_excerpt` instead.
-
-```json
-{
-  "filePath": "src/config.json",
-  "maxBytes": 102400
-}
-```
-
 ## Development
 
-### Rust Development
-
 ```bash
-cd code-engine
-
-# Run tests
+# Run all tests
 cargo test
 
-# Run with logging
-RUST_LOG=debug cargo run -- /path/to/repo
-
 # Lint
-cargo clippy
+cargo clippy -- -D warnings
+
+# Format
+cargo fmt
 ```
 
-### Node Development
+The `docker_shell` tests detect Docker availability at runtime and self-skip when it's absent, so `cargo test` works without Docker.
 
-```bash
-cd mcp-server
+## Releases
 
-# Rebuild TypeScript
-npm run build
+Pre-built binaries for the following targets are attached to each [GitHub Release](../../releases):
 
-# Clean build artifacts
-npm run clean
-```
+| Target | Description |
+|--------|-------------|
+| `x86_64-unknown-linux-gnu` | Linux x86_64 (glibc) |
+| `x86_64-unknown-linux-musl` | Linux x86_64 (static musl) |
+| `aarch64-unknown-linux-gnu` | Linux ARM64 (glibc) |
+| `aarch64-unknown-linux-musl` | Linux ARM64 (static musl) |
+| `aarch64-apple-darwin` | macOS Apple Silicon |
+| `x86_64-apple-darwin` | macOS Intel |
+| `x86_64-pc-windows-msvc` | Windows x86_64 |
+| `aarch64-pc-windows-msvc` | Windows ARM64 |
 
-### Testing the Pipeline
+## Error Codes
 
-You can test the Rust engine directly via NDJSON:
-
-```bash
-cd code-engine
-cargo build --release
-
-# Test with echo
-echo '{"id":"test1","op":"list_dir","args":{"dirPath":"."}}' | ./target/release/code-engine .
-```
-
-## Cache Behavior
-
-The Rust engine maintains a cache of parsed files (as Ropey objects) with metadata:
-
-- **Cache key**: Canonical absolute file path
-- **Metadata**: File size and modification time (nanosecond precision)
-- **Invalidation**: Automatic on next access if (size, mtime) differs
-- **Impact**: External edits (from IDE, git, etc.) are detected immediately
-
-This means the agent always sees the latest file content without explicit cache clearing.
-
-## Error Handling
-
-The engine returns structured errors with stable error codes:
-
-- `INVALID_ARGUMENT` - Bad input parameters
-- `NOT_FOUND` - File/directory doesn't exist
-- `PATH_OUTSIDE_ROOT` - Path traversal attempt blocked
-- `DRIFT_DETECTED` - Anchor not found or file changed unexpectedly
-- `SEARCH_FAILED` - ripgrep execution failed
-- `PARSE_FAILED` - tree-sitter parsing failed
-- `IO_ERROR` - Filesystem operation failed
-- `INTERNAL` - Unexpected error
-
-## Supported Languages
-
-### Code Exploration (tree-sitter)
-
-- TypeScript (`.ts`, `.tsx`)
-- JavaScript (`.js`, `.jsx`)
-- Rust (`.rs`)
-- Java (`.java`)
-
-Additional languages can be added by:
-1. Adding tree-sitter grammar dependency to `Cargo.toml`
-2. Extending detection logic in `explore_code.rs`
-3. Implementing symbol extraction for the grammar
-
-## Performance Notes
-
-- **ripgrep** provides extremely fast text search across large codebases
-- **Ropey** enables efficient line-based operations on large files
-- **Cache** reduces redundant file I/O and parsing
-- **NDJSON streaming** provides low-latency request/response
-- **Atomic writes** ensure file integrity even if process crashes
+| Code | Meaning |
+|------|---------|
+| `INVALID_ARGUMENT` | Bad input parameters |
+| `NOT_FOUND` | File or directory not found |
+| `PATH_OUTSIDE_ROOT` | Path traversal attempt blocked |
+| `DRIFT_DETECTED` | Anchor not found or file changed unexpectedly |
+| `SEARCH_FAILED` | ripgrep execution failed |
+| `PARSE_FAILED` | tree-sitter parsing failed |
+| `IO_ERROR` | Filesystem operation failed |
+| `INTERNAL` | Unexpected error |
 
 ## License
 
 MIT
-
-## Contributing
-
-Contributions welcome! Please ensure:
-
-1. Rust code passes `cargo clippy` and `cargo test`
-2. TypeScript compiles without errors
-3. All tools maintain backward-compatible JSON schemas
-4. Error codes remain stable (part of public API)

@@ -86,7 +86,6 @@ fn truncate_to_max_bytes(s: &str, max_bytes: usize) -> (String, bool) {
     (out, true)
 }
 
-
 #[cfg(test)]
 #[path = "read_excerpt_test.rs"]
 mod read_excerpt_test;

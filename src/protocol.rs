@@ -1,48 +1,5 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-
-pub type RequestId = String;
-
-/// NDJSON request envelope
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EngineRequest {
-    pub id: RequestId,
-    pub op: OpName,
-    #[serde(default)]
-    pub args: Value,
-}
-
-/// NDJSON response envelope
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EngineResponse {
-    pub id: RequestId,
-    pub ok: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub result: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<EngineError>,
-}
-
-impl EngineResponse {
-    pub fn ok(id: RequestId, result: Value) -> Self {
-        Self {
-            id,
-            ok: true,
-            result: Some(result),
-            error: None,
-        }
-    }
-    pub fn err(id: RequestId, error: EngineError) -> Self {
-        Self {
-            id,
-            ok: false,
-            result: None,
-            error: Some(error),
-        }
-    }
-}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -50,7 +7,7 @@ pub struct EngineError {
     pub code: ErrorCode,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<Value>,
+    pub details: Option<serde_json::Value>,
 }
 
 impl EngineError {
@@ -61,7 +18,7 @@ impl EngineError {
             details: None,
         }
     }
-    pub fn with_details(mut self, details: Value) -> Self {
+    pub fn with_details(mut self, details: serde_json::Value) -> Self {
         self.details = Some(details);
         self
     }
@@ -81,30 +38,9 @@ pub enum ErrorCode {
     Internal,
 }
 
-/// Supported operations.
-/// Keep names stable; Node will call these strings.
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum OpName {
-    ListDir,
-    SearchText,
-    ReadExcerpt,
-    ExploreCode,
-    ApplyPatch,
-    CreateDirectory,
-    CreateFile,
-    ReadFileInfo,
-    DeleteFile,
-    ReadFile,
-}
+// ---------- list_dir ----------
 
-/// ---------- Typed args/results (optional but recommended) ----------
-/// You can either:
-/// 1) parse EngineRequest.args into these structs per op, OR
-/// 2) use serde_json::Value everywhere.
-/// I recommend parsing per-op to fail fast with InvalidArgument.
-
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ListDirArgs {
     pub dir_path: String,
@@ -128,16 +64,19 @@ pub struct ListDirResult {
     pub entries: Vec<ListDirEntry>,
     pub truncated: bool,
 }
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListDirEntry {
     pub path: String,
-    pub entry_type: String, // "file" | "dir"
+    pub entry_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
 }
 
-#[derive(Debug, Deserialize)]
+// ---------- search_text ----------
+
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchTextArgs {
     pub pattern: String,
@@ -177,6 +116,7 @@ pub struct SearchTextResult {
     pub matches: Vec<SearchMatch>,
     pub truncated: bool,
 }
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchMatch {
@@ -187,7 +127,9 @@ pub struct SearchMatch {
     pub text: String,
 }
 
-#[derive(Debug, Deserialize)]
+// ---------- read_excerpt ----------
+
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadExcerptArgs {
     pub file_path: String,
@@ -199,7 +141,7 @@ pub struct ReadExcerptArgs {
     pub max_bytes: usize,
 }
 fn default_max_bytes() -> usize {
-    20_000 // Default is 20KB, but hard limit of 100KB is enforced
+    20_000
 }
 
 #[derive(Debug, Serialize)]
@@ -212,7 +154,9 @@ pub struct ReadExcerptResult {
     pub truncated: bool,
 }
 
-#[derive(Debug, Deserialize)]
+// ---------- explore_code ----------
+
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ExploreCodeArgs {
     pub file_path: String,
@@ -228,7 +172,7 @@ fn default_max_symbols() -> usize {
 #[serde(rename_all = "camelCase")]
 pub struct ExploreCodeResult {
     pub file_path: String,
-    pub language: String, // "ts"|"js"|"rust"|"java"|"unknown"
+    pub language: String,
     pub symbols: Vec<ExploredSymbol>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<Vec<String>>,
@@ -252,23 +196,25 @@ pub struct SymbolLocation {
     pub end_line: u32,
 }
 
-#[derive(Debug, Deserialize)]
+// ---------- apply_patch ----------
+
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ApplyPatchArgs {
     pub file_path: String,
     #[serde(default)]
-    pub mode: Option<String>, // "strict"|"best_effort"
+    pub mode: Option<String>,
     #[serde(default)]
     pub dry_run: bool,
     pub edits: Vec<PatchEdit>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum PatchEdit {
     Insert {
         #[serde(rename = "where")]
-        where_: String, // "before"|"after"
+        where_: String,
         anchor: PatchAnchor,
         text: String,
     },
@@ -281,7 +227,7 @@ pub enum PatchEdit {
     },
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PatchAnchor {
     pub needle: String,
@@ -289,7 +235,7 @@ pub struct PatchAnchor {
     pub require_unique: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PatchRegion {
     pub start: PatchAnchor,
@@ -318,7 +264,9 @@ pub struct AppliedEditSummary {
     pub end_line: Option<u32>,
 }
 
-#[derive(Debug, Deserialize)]
+// ---------- create_directory ----------
+
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateDirectoryArgs {
     pub dir_path: String,
@@ -331,7 +279,9 @@ pub struct CreateDirectoryResult {
     pub created: bool,
 }
 
-#[derive(Debug, Deserialize)]
+// ---------- create_file ----------
+
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateFileArgs {
     pub file_path: String,
@@ -351,7 +301,9 @@ pub struct CreateFileResult {
     pub bytes_written: usize,
 }
 
-#[derive(Debug, Deserialize)]
+// ---------- read_file_info ----------
+
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadFileInfoArgs {
     pub file_path: String,
@@ -362,14 +314,16 @@ pub struct ReadFileInfoArgs {
 pub struct ReadFileInfoResult {
     pub file_path: String,
     pub exists: bool,
-    pub entry_type: String, // "file" | "dir" | "symlink" | "other"
+    pub entry_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mtime_ns: Option<i128>,
 }
 
-#[derive(Debug, Deserialize)]
+// ---------- delete_file ----------
+
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteFileArgs {
     pub file_path: String,
@@ -382,17 +336,18 @@ pub struct DeleteFileResult {
     pub deleted: bool,
 }
 
-#[derive(Debug, Deserialize)]
+// ---------- read_file ----------
+
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadFileArgs {
     pub file_path: String,
     /// Maximum bytes to read. Hard limit of 100KB (102,400 bytes) is enforced.
-    /// Values above 100KB will be capped to 100KB.
     #[serde(default = "default_max_file_bytes")]
     pub max_bytes: usize,
 }
 fn default_max_file_bytes() -> usize {
-    102_400 // 100KB - this is the hard limit, cannot be exceeded
+    102_400
 }
 
 #[derive(Debug, Serialize)]
@@ -402,4 +357,33 @@ pub struct ReadFileResult {
     pub contents: String,
     pub size: u64,
     pub truncated: bool,
+}
+
+// ---------- docker_shell ----------
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerShellArgs {
+    /// Shell command to execute inside the container.
+    pub command: String,
+    /// Timeout in milliseconds (default: 30000).
+    #[serde(default = "default_docker_timeout_ms")]
+    pub timeout_ms: u64,
+    /// Working directory relative to /workspace (default: ".").
+    #[serde(default = "default_work_dir")]
+    pub work_dir: String,
+}
+fn default_docker_timeout_ms() -> u64 {
+    30_000
+}
+fn default_work_dir() -> String {
+    ".".to_string()
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerShellResult {
+    pub exit_code: i32,
+    pub output: Vec<(String, String)>,
+    pub success: bool,
 }

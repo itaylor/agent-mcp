@@ -69,7 +69,6 @@ pub fn run(ws: &Workspace, args: ReadFileArgs) -> Result<ReadFileResult, EngineE
     })
 }
 
-
 #[cfg(test)]
 #[path = "read_file_test.rs"]
 mod read_file_test;

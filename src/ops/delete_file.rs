@@ -46,7 +46,6 @@ pub fn run(ws: &Workspace, args: DeleteFileArgs) -> Result<DeleteFileResult, Eng
     })
 }
 
-
 #[cfg(test)]
 #[path = "delete_file_test.rs"]
 mod delete_file_test;
