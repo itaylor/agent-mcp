@@ -27,6 +27,11 @@ jobs:
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2
 
+      - name: Install ripgrep
+        uses: taiki-e/install-action@v2
+        with:
+          tool: ripgrep
+
       - name: cargo test
         run: cargo test --all-features
         # docker_shell tests will self-skip when docker is unavailable

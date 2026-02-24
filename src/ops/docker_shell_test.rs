@@ -11,16 +11,16 @@ fn make_manager() -> DockerManager {
     )
 }
 
-/// Helper: skip the test if docker is not available on the host.
+/// Helper: skip the test if docker is not available on the host or not running in Linux mode.
 async fn docker_available() -> bool {
-    Command::new("docker")
-        .args(["info"])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .await
-        .map(|s| s.success())
-        .unwrap_or(false)
+    let output = Command::new("docker")
+        .args(["info", "--format", "{{.OSType}}"])
+        .output()
+        .await;
+    match output {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).trim() == "linux",
+        _ => false,
+    }
 }
 
 #[tokio::test]

@@ -148,4 +148,4 @@ Pre-built binaries for the following targets are attached to each [GitHub Releas
 
 ## License
 
-MIT
+[MIT](LICENSE.md)
