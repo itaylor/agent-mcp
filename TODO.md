@@ -4,23 +4,6 @@ This document tracks known issues, planned improvements, and missing features fo
 
 ## Critical Issues
 
-### 1. Cache Unbounded Growth (Memory Leak)
-
-**Location**: `code-engine/src/cache.rs`
-
-**Problem**: The Ropey cache (`HashMap<PathBuf, CacheEntry>`) grows unbounded without any eviction policy. In long-running sessions that access hundreds or thousands of files, memory consumption will grow without limit until OOM.
-
-**Impact**: High - Will crash in production during long agent sessions
-
-**Solution**: Implement LRU (Least Recently Used) eviction:
-- Add configurable size limit (e.g., max 100 entries or 500MB total)
-- Track access time for each cache entry
-- Evict oldest entries when limit reached
-- Consider using `lru` crate or similar
-
-**Estimated Effort**: Medium (4-8 hours)
-
----
 
 ### 2. No Batch Operation Support
 

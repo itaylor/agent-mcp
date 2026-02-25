@@ -2,6 +2,10 @@
 
 A high-performance MCP (Model Context Protocol) server for code operations, designed for LLM agentic workflows. Provides file system navigation, text search, code analysis, intelligent patch application, and isolated Docker shell execution — all in a single Rust binary.
 
+## Why does this exist?
+
+It's my belief that the best Agentic Coding UI may not be the terminal or the IDE, but something else that we haven't seen yet.  Whatever that other UI paradigm may be, the agents operating within it will need a set of tools to be able to do the basic functions of searching, exploring, reading and writing code.  This MCP server seeks to provide those basic, low-level tools.
+
 ## Architecture
 
 A single Rust binary that speaks the MCP stdio protocol directly via [`rmcp`](https://github.com/modelcontextprotocol/rust-sdk).
@@ -86,6 +90,7 @@ REPO_ROOT=/path/to/repo ./agent-mcp
 |----------|---------|-------------|
 | `REPO_ROOT` | `.` | Root directory for all file operations |
 | `AGENT_MCP_DOCKER_IMAGE` | `ubuntu:24.04` | Docker image for `docker_shell` |
+| `AGENT_MCP_CACHE_MB` | `128` | Maximum memory (in MB) for the rope file cache. When the limit is reached, least-recently-used files are evicted. A single file larger than the limit is always kept. |
 
 ### MCP Client Configuration
 

@@ -1,8 +1,8 @@
 use crate::protocol::{EngineError, ErrorCode};
 use crate::workspace::Workspace;
+use lru::LruCache;
 use ropey::Rope;
 use serde_json::json;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -18,15 +18,24 @@ pub struct CacheEntry {
     pub rope: Rope,
 }
 
-#[derive(Default)]
 pub struct RopeCache {
-    entries: HashMap<PathBuf, CacheEntry>,
+    entries: LruCache<PathBuf, CacheEntry>,
+    max_bytes: usize,
+    current_bytes: usize,
+}
+
+impl Default for RopeCache {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RopeCache {
     pub fn new() -> Self {
         Self {
-            entries: HashMap::new(),
+            entries: LruCache::unbounded(),
+            max_bytes: cache_max_bytes(),
+            current_bytes: 0,
         }
     }
 
@@ -51,7 +60,8 @@ impl RopeCache {
                 .with_details(json!({ "path": user_path, "io": e.to_string() }))
         })?;
 
-        let needs_reload = match self.entries.get(&resolved) {
+        // Use peek so we don't promote a stale entry that's about to be replaced.
+        let needs_reload = match self.entries.peek(&resolved) {
             None => true,
             Some(entry) => entry.meta != fresh_meta,
         };
@@ -63,7 +73,7 @@ impl RopeCache {
             })?;
 
             let rope = Rope::from_str(&text);
-            self.entries.insert(
+            self.insert(
                 resolved.clone(),
                 CacheEntry {
                     meta: fresh_meta,
@@ -98,7 +108,7 @@ impl RopeCache {
             .with_details(json!({ "path": user_path, "io": e.to_string() }))
         })?;
 
-        self.entries.insert(
+        self.insert(
             resolved,
             CacheEntry {
                 meta: fresh_meta,
@@ -107,6 +117,36 @@ impl RopeCache {
         );
         Ok(())
     }
+
+    fn insert(&mut self, path: PathBuf, entry: CacheEntry) {
+        let new_bytes = entry.rope.len_bytes();
+
+        // If replacing an existing entry, subtract its contribution first.
+        if let Some(old) = self.entries.put(path, entry) {
+            self.current_bytes = self.current_bytes.saturating_sub(old.rope.len_bytes());
+        }
+        self.current_bytes += new_bytes;
+
+        // Evict LRU entries until we're within the limit. Always keep at least
+        // one entry (the one we just inserted) even if it alone exceeds the limit,
+        // since evicting it would leave us with nothing useful.
+        while self.current_bytes > self.max_bytes && self.entries.len() > 1 {
+            if let Some((_, evicted)) = self.entries.pop_lru() {
+                self.current_bytes = self.current_bytes.saturating_sub(evicted.rope.len_bytes());
+            } else {
+                break;
+            }
+        }
+    }
+}
+
+fn cache_max_bytes() -> usize {
+    const DEFAULT_MB: usize = 128;
+    std::env::var("AGENT_MCP_CACHE_MB")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .map(|mb| mb.saturating_mul(1024 * 1024))
+        .unwrap_or(DEFAULT_MB * 1024 * 1024)
 }
 
 fn file_meta(meta: &std::fs::Metadata) -> std::io::Result<FileMeta> {
