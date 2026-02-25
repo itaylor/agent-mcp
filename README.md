@@ -123,19 +123,34 @@ cargo fmt
 
 The `docker_shell` tests detect Docker availability at runtime and self-skip when it's absent, so `cargo test` works without Docker.
 
-## Releases
+## Install from Releases
 
-Pre-built binaries for the following targets are attached to each [GitHub Release](../../releases):
+Pre-built binaries are available on the [GitHub Releases page](https://github.com/itaylor/agent-mcp/releases).
 
-| Target | Description |
-|--------|-------------|
-| `x86_64-unknown-linux-gnu` | Linux x86_64 (glibc) |
-| `x86_64-unknown-linux-musl` | Linux x86_64 (static musl) |
-| `aarch64-unknown-linux-gnu` | Linux ARM64 (glibc) |
-| `aarch64-unknown-linux-musl` | Linux ARM64 (static musl) |
-| `aarch64-apple-darwin` | macOS Apple Silicon |
-| `x86_64-pc-windows-msvc` | Windows x86_64 |
-| `aarch64-pc-windows-msvc` | Windows ARM64 |
+**Linux / macOS** — download, extract, and place the binary in your `PATH`:
+
+```bash
+# Example for Linux x86_64 musl (static, no libc dependency)
+curl -L https://github.com/itaylor/agent-mcp/releases/latest/download/agent-mcp-<VERSION>-x86_64-unknown-linux-musl.tar.gz \
+  | tar xz
+chmod +x agent-mcp
+sudo mv agent-mcp /usr/local/bin/
+```
+
+Replace `<VERSION>` with the release tag (e.g. `v0.1.0`) and the target triple with one from the table below.
+
+**Windows** — download the `.zip` for your architecture, extract `agent-mcp.exe`, and add it to a directory on your `PATH`.
+
+### Available targets
+
+| Target | Archive | Description |
+|--------|---------|-------------|
+| `x86_64-unknown-linux-gnu` | `.tar.gz` | Linux x86_64 (glibc) |
+| `x86_64-unknown-linux-musl` | `.tar.gz` | Linux x86_64 (static musl) |
+| `aarch64-unknown-linux-gnu` | `.tar.gz` | Linux ARM64 (glibc) |
+| `aarch64-unknown-linux-musl` | `.tar.gz` | Linux ARM64 (static musl) |
+| `x86_64-pc-windows-msvc` | `.zip` | Windows x86_64 |
+| `aarch64-pc-windows-msvc` | `.zip` | Windows ARM64 |
 
 ## Error Codes
 
